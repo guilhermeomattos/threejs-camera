@@ -1,4 +1,4 @@
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View, Vibration } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { GLView } from 'expo-gl';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -31,6 +31,7 @@ export default function Realidade() {
     const frameRef = useRef(null);
     const cenaRef = useRef(null);
     const alvosRef = useRef([]);
+    const estourosRef = useRef([]);
     const rotacaoRef = useRef(null);
     const alphaInicialRef = useRef(null);
     const inicioRef = useRef(0);
@@ -59,6 +60,7 @@ export default function Realidade() {
             assinatura.remove();
             cancelAnimationFrame(frameRef.current);
             clearInterval(relogioRef.current);
+            Vibration.cancel();
         };
     }, []);
 
@@ -98,11 +100,26 @@ export default function Realidade() {
                 alvo.rotation.y += 0.02;
             });
 
+            animaEstouros();
+
             renderer.render(cena, camera);
             gl.endFrameEXP();
         }
 
         animar();
+    }
+
+    function animaEstouros() {
+        estourosRef.current.forEach(alvo => {
+            alvo.scale.multiplyScalar(1.12);
+            alvo.rotation.y += 0.3;
+            alvo.material.opacity -= 0.08;
+
+            if (alvo.material.opacity <= 0)
+                removeAlvo(alvo);
+        });
+
+        estourosRef.current = estourosRef.current.filter(alvo => alvo.material.opacity > 0);
     }
 
     function criaAlvos() {
@@ -116,7 +133,7 @@ export default function Realidade() {
 
             let alvo = new THREE.Mesh(
                 FORMAS[i % FORMAS.length](),
-                new THREE.MeshStandardMaterial({ color: CORES[i % CORES.length] })
+                new THREE.MeshStandardMaterial({ color: CORES[i % CORES.length], transparent: true })
             );
             alvo.position.set(Math.sin(angulo) * distancia, altura, -Math.cos(angulo) * distancia);
 
@@ -135,7 +152,9 @@ export default function Realidade() {
 
     function limpaAlvos() {
         alvosRef.current.forEach(alvo => removeAlvo(alvo));
+        estourosRef.current.forEach(alvo => removeAlvo(alvo));
         alvosRef.current = [];
+        estourosRef.current = [];
     }
 
     function centraliza() {
@@ -180,6 +199,8 @@ export default function Realidade() {
 
         let total = Math.floor((Date.now() - inicioRef.current) / 1000);
 
+        Vibration.vibrate([0, 150, 100, 150, 100, 400]);
+
         cenaRef.current.demo.visible = true;
         setTempo(total);
         setJogando(false);
@@ -188,8 +209,11 @@ export default function Realidade() {
     }
 
     function captura(alvo) {
-        removeAlvo(alvo);
         alvosRef.current = alvosRef.current.filter(item => item !== alvo);
+        estourosRef.current.push(alvo);
+
+        Vibration.vibrate(80);
+
         setPontos(TOTAL_ALVOS - alvosRef.current.length);
 
         if (alvosRef.current.length == 0)
